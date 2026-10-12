@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Node syntax check
+        shell: pwsh
+        run: |
+          $bad = 0
+          Get-ChildItem runtime -Recurse -Include *.mjs, *.js | ForEach-Object {
+            node --check $_.FullName
+            if ($LASTEXITCODE -ne 0) { Write-Host "FAILED: $($_.FullName)"; $bad++ }
+          }
+          if ($bad -gt 0) { exit 1 }
+          Write-Host 'all runtime files parse'
+
+      - name: Bundle builds from source
+        shell: pwsh
+        run: |
+          node runtime/build-bundle.mjs
+          if (-not (Test-Path runtime/splash-bundle.js)) { throw 'bundle was not produced' }
+
+      - name: PowerShell syntax check
+        shell: pwsh
+        run: |
+          $bad = 0
+          foreach ($f in 'install.ps1', 'uninstall.ps1') {
+            $errs = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$null, [ref]$errs)
+            if ($errs) { $errs | ForEach-Object { Write-Host "$f : $_" }; $bad++ }
+          }
+          if ($bad -gt 0) { exit 1 }
+          Write-Host 'installer/uninstaller parse'
+
+      - name: Skill frontmatter is well formed
+        shell: pwsh
+        run: |
+          $p = 'skill/hermes-startup-animation/SKILL.md'
+          $raw = Get-Content $p -Raw
+          if (-not $raw.StartsWith('---')) { throw 'SKILL.md must start with frontmatter' }
+          if ($raw -notmatch "(?m)^name:\s*hermes-startup-animation\s*$") { throw 'SKILL.md name mismatch' }
+          if ($raw -notmatch "(?m)^description:\s*\S") { throw 'SKILL.md needs a description' }
+          Write-Host 'skill frontmatter ok'

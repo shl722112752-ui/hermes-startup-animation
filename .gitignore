@@ -1,0 +1,23 @@
+# 安装时生成 / 运行时产生的东西，不入库
+runtime/paths.json
+runtime/splash-bundle.js
+runtime/config.json
+runtime/config.json.bak
+runtime/config.json.bad-*
+runtime/hermes-splash.cmd
+runtime/hermes-splash-supervisor.vbs
+runtime/*.log
+runtime/*.pid
+
+# 本机状态
+supervisor.log
+watcher.log
+
+# 通用
+node_modules/
+dist/
+*.zip
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp

@@ -1,0 +1,60 @@
+name: Release
+
+# 打 tag（如 v1.0.0）时自动打包并创建 Release。
+# 附件是一个 zip：解压后直接跑 install.ps1 即可。
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Sanity check
+        shell: pwsh
+        run: |
+          Get-ChildItem runtime -Recurse -Include *.mjs | ForEach-Object {
+            node --check $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "syntax error in $($_.FullName)" }
+          }
+          node runtime/build-bundle.mjs
+
+      - name: Pack
+        shell: pwsh
+        run: |
+          $name = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { 'dev' }
+          $stage = "hermes-startup-animation-$name"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          foreach ($item in 'install.ps1', 'uninstall.ps1', 'README.md', 'LICENSE', 'NOTICE.md', 'CHANGELOG.md', 'runtime', 'skill', 'docs') {
+            Copy-Item $item $stage -Recurse -Force
+          }
+          # 运行时不需要源码里的中间产物
+          Remove-Item "$stage/runtime/splash-bundle.js" -Force -ErrorAction SilentlyContinue
+          Compress-Archive -Path $stage -DestinationPath "$stage.zip" -Force
+          Write-Host "packed $stage.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: hermes-startup-animation-*.zip
+
+      - name: Create release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: hermes-startup-animation-*.zip
+          generate_release_notes: true
