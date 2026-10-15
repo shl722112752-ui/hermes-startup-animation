@@ -1,7 +1,7 @@
 ---
 name: hermes-startup-animation
 description: "在 Hermes 内开关与调整桌面启动动画（自动/交互）。"
-version: 1.4.1
+version: 1.4.2
 author: shl722112752-ui, Hermes Agent
 license: MIT
 platforms: [windows]
@@ -84,7 +84,7 @@ terminal(command='& "$env:LOCALAPPDATA\HermesSplash\hermes-splash.cmd" interacti
 | `hermes-splash now` | 让改动**立刻**生效：重载 Hermes 窗口，动画会重播一次 |
 | `hermes-splash restart` | 重启监督进程（连带重启注入进程；改完源码想立刻生效时用） |
 | `hermes-splash doctor` | 13 项只读自检（条件项 SKIP 不算失败）；非 0 退出码表示有不通过项 |
-| `hermes-splash reset` | 恢复内置默认（旧文件备份成 `config.json.bak`） |
+| `hermes-splash reset` | 恢复内置默认（旧文件按时间戳备份成 `config.json.<时间>.bak`） |
 | `hermes-splash dsh` | 从本地 `dsh-startup.json` 导入设置 |
 
 ## 在 Hermes 界面里改
@@ -122,6 +122,9 @@ terminal(command='& "$env:LOCALAPPDATA\HermesSplash\hermes-splash.cmd" interacti
 
 ### A. 切换自动 / 交互
 
+> 开箱默认是**自动播完**（`requireInteraction: false`，六幕约 24 秒，随时可 `Esc`/SKIP）。
+> 要停下来等确认才改成 `true`。
+
 1. 先看当前值：`hermes-splash get requireInteraction`。
 2. 三条路任选：
    - 界面（最省事）：让用户打开「02 配置 → 技能」，卡片上点「自动播放 / 交互确认」；
@@ -147,7 +150,7 @@ terminal(command='& "$env:LOCALAPPDATA\HermesSplash\hermes-splash.cmd" interacti
 正常情况下**已经自动修好了**（注入进程 2 秒、监督进程 ≤2 分钟、前提条件 ≤60 秒）。
 所以先读现状，别急着改东西：
 
-1. `hermes-splash doctor` ——13 项自检。它是**只读诊断**，不修东西：
+1. `hermes-splash doctor` ——12 项自检（Hermes 窗口开着时 13 项，多一项「能解析到调试端口」）。它是**只读诊断**，不修东西：
    - 监督进程 / 注入进程 FAIL → 系统会自己拉起来；想立刻恢复用 `hermes-splash restart`
    - 登录自启 FAIL → `install.ps1` 会补齐（把 `hermes-splash-supervisor.vbs` 放进「启动」文件夹）
    - 调试端口 FAIL → 监督进程会自动补环境变量，但**要下次启动 Hermes 才生效**

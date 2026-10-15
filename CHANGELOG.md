@@ -3,6 +3,32 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.1] - 2026-10-15
+
+### 新增
+
+- 单元测试 `tests/`：用 Node 自带的 `node:test`（无第三方依赖），CI 与打包前都会跑。
+  - `schema.test.mjs`：33 项设置的校验规则、面板分组/标签的漂移检查、
+    颜色必须是十六进制（回归测试，见下）、补默认值不改原对象。
+  - `cdp-port.test.mjs`：调试端口发现优先级（显式 > 环境变量 > 固定 > `DevToolsActivePort`）、
+    多份 `DevToolsActivePort` 取最新、垃圾内容与 `0` 的处理。
+
+### 修复
+
+- **新装用户的默认播放方式与文档不一致**：`runtime/schema.mjs` 的 `DEFAULTS.requireInteraction`
+  是 `true`（照抄上游本体的默认值），而 [docs/configuration.md](docs/configuration.md) 的键值表
+  写的是 `false`。监督进程正是拿这份 `DEFAULTS` 给新机器落盘 `config.json` 的，所以全新安装会
+  停在第一幕等确认，而不是文档承诺的自动播完。已改为 `false`；想交互的用户在技能页卡片上切一下，
+  或跑 `hermes-splash interactive`。
+- **颜色设置其实没被校验过**：`schema.mjs` 里写成 `if (COLORS[key])`，而 `COLORS` 是数组，
+  取键永远得到 `undefined`，于是任意字符串都能写进 `config.json`。改为 `COLORS.includes(key)`，
+  并补了回归测试。
+
+### 文档
+
+- README 的「目录结构」补上 `tests/`；CONTRIBUTING 增加 `node --test` 与「测试写在哪」一节。
+- 安装参数示例里的路径改成中性的 `D:\Apps\Hermes Agent CN Desktop`（原先用的是维护者本机的真实路径）。
+
 ## [1.0.0] - 2026-10-12
 
 首个公开版本。
@@ -43,4 +69,5 @@
 - **注入进程被外部杀掉后静默失效**：现在由监督进程 + 计划任务两层兜底。
 - 设置面板保存失败时给出明确提示；交互动画停住时面板仍可打开（层级在动画之上）。
 
+[1.0.1]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/shl722112752-ui/hermes-startup-animation/releases/tag/v1.0.0

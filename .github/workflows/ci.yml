@@ -26,6 +26,13 @@ jobs:
           if ($bad -gt 0) { exit 1 }
           Write-Host 'all runtime files parse'
 
+      - name: Unit tests
+        shell: pwsh
+        run: |
+          node --test
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Write-Host 'tests passed'
+
       - name: Bundle builds from source
         shell: pwsh
         run: |

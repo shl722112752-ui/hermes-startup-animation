@@ -18,7 +18,7 @@
 
     Usage:
       powershell -ExecutionPolicy Bypass -File install.ps1
-      powershell -ExecutionPolicy Bypass -File install.ps1 -HermesDir "D:\Hermes Agent CN Desktop"
+      powershell -ExecutionPolicy Bypass -File install.ps1 -HermesDir "D:\Apps\Hermes Agent CN Desktop"
       powershell -ExecutionPolicy Bypass -File install.ps1 -InstallDir "$env:LOCALAPPDATA\HermesSplash"
 
     Keep this file pure ASCII: Windows PowerShell 5.1 reads .ps1 without a BOM

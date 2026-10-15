@@ -31,6 +31,8 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "syntax error in $($_.FullName)" }
           }
           node runtime/build-bundle.mjs
+          node --test
+          if ($LASTEXITCODE -ne 0) { throw 'unit tests failed' }
 
       - name: Pack
         shell: pwsh

@@ -7,7 +7,11 @@
 
 export const DEFAULTS = {
   enabled: true, mode: 'session', theme: 'light', speed: 1,
-  requireInteraction: true, allowSkip: true,
+  /* 注意：这里与 src/plugin.js（上游本体）的默认值**故意不同**。
+     上游默认 true（第 1、2 步停下来等确认），但那是在浏览器标签页里的交互习惯；
+     本项目是桌面端开机动画，装好就该自己播完（见 docs/configuration.md 的键值表）。
+     config.json 由监督进程按这份 DEFAULTS 落盘，所以显式写 false 才能压过插件自己的默认。 */
+  requireInteraction: false, allowSkip: true,
   sound: true, soundVolume: 0.5, voice: true, voiceLang: 'en', voiceName: '',
   voiceRate: 0.88, voicePitch: 0.85, voiceVolume: 0.9, voiceCue: true,
   sfx: 'audio', voiceSource: 'asset', voiceLead: 240,

@@ -55,6 +55,8 @@ docs/             原理 / 配置 / 排障
 ```powershell
 # Node 语法
 Get-ChildItem runtime -Recurse -Include *.mjs | ForEach-Object { node --check $_.FullName }
+# 单元测试（tests/ 下，node:test，无第三方依赖）
+node --test
 # 打包能过
 node runtime/build-bundle.mjs
 # 安装器语法
@@ -62,6 +64,15 @@ node runtime/build-bundle.mjs
 ```
 
 CI 会跑同样的检查。
+
+### 测试写在哪
+
+`tests/*.test.mjs`，用 Node 自带的 `node:test` + `node:assert/strict`，**不引入任何依赖**
+（CI 只装 Node）。优先测纯逻辑模块（`runtime/schema.mjs`、`runtime/cdp-port.mjs`）——
+它们不碰文件系统之外的东西，能直接构造。
+
+涉及真实环境的改动（注入、CDP、自启、卸载）没法在 CI 里跑，请在真机上按
+[docs/troubleshooting.md](docs/troubleshooting.md) 走一遍，并把观察写进 PR 描述。
 
 ## 许可
 

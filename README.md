@@ -61,7 +61,7 @@ powershell -ExecutionPolicy Bypass -File "$env:TEMP\hsa\hermes-startup-animation
 
 安装器会自己找到 Hermes 安装目录、`HERMES_HOME` 和可用的 Node，然后：
 装上运行时 → 把设置面板需要的启动器按本机情况生成 → 设置调试端口环境变量 →
-放进「启动」文件夹 → 注册计划任务 → 立刻启动 → 跑一遍 13 项自检。
+放进「启动」文件夹 → 注册计划任务 → 立刻启动 → 跑一遍自检（12 项；Hermes 窗口开着时 13 项）。
 
 结束后**启动一次 Hermes** 就能看到动画（脚本运行前就已经开着的那个窗口不会补播）。
 
@@ -69,7 +69,7 @@ powershell -ExecutionPolicy Bypass -File "$env:TEMP\hsa\hermes-startup-animation
 
 ```powershell
 # Hermes 装在非常规位置时
-powershell -ExecutionPolicy Bypass -File install.ps1 -HermesDir "D:\Hermes Agent CN Desktop"
+powershell -ExecutionPolicy Bypass -File install.ps1 -HermesDir "D:\Apps\Hermes Agent CN Desktop"
 
 # 自定义安装目录 / 端口
 powershell -ExecutionPolicy Bypass -File install.ps1 -InstallDir "$env:LOCALAPPDATA\HermesSplash" -CdpPort 9333
@@ -186,6 +186,7 @@ runtime/                        安装到 %LOCALAPPDATA%\HermesSplash 的内容
   src/panel.js                  窗口内设置界面（技能页卡片 + 抽屉）
 skill/                          Hermes 技能：装进 HERMES_HOME\skills\
 docs/                           原理 / 配置 / 排障
+tests/                          单元测试（node:test，`node --test` 直接跑）
 ```
 
 ## 安全说明
