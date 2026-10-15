@@ -3,6 +3,22 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.7] - 2026-10-15
+
+### 修复
+
+- **`get.ps1` 下载时逐次打印进度，单次尝试从 300 秒收紧到 120 秒**。原先 4 次尝试
+  （API 通道 2 次 + `github.com` 通道 2 次）各可静默等待 300 秒，连接被墙时要等二十分钟
+  才报错，看起来就像卡死；现在每次尝试都会打印「走哪个通道、第几次、花了多久」，
+  失败原因也一并打印，最迟几分钟内就以退出码 1 给出结论和手动步骤。
+
+### 文档
+
+- **README 方式一改用 `api.github.com` 取 `get.ps1`**（`Accept: application/vnd.github.raw`），
+  并把流程写成「落盘 → 看一眼 → 运行」。有些网络（hosts 改写、公司过滤、区域封锁）连不上
+  `github.com` 与 `raw.githubusercontent.com`，但 API 主机仍然可用 —— 本项目下载 zip 时用的
+  就是同一套「先 API、后 github.com」策略。`raw` 能通的网络仍保留等价的两行写法。
+
 ## [1.0.6] - 2026-10-15
 
 ### 修复
@@ -133,6 +149,7 @@
 - **注入进程被外部杀掉后静默失效**：现在由监督进程 + 计划任务两层兜底。
 - 设置面板保存失败时给出明确提示；交互动画停住时面板仍可打开（层级在动画之上）。
 
+[1.0.7]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.6...v1.0.7
 [1.0.6]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.3...v1.0.4

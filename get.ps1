@@ -5,15 +5,20 @@
     Downloads the release zip from GitHub, verifies its SHA-256 against the
     SHA256SUMS.txt published with the same release, then runs install.ps1.
 
-    One line (recommended):
+    Recommended (two lines: download it, read it, run it). The API host is used
+    instead of raw.githubusercontent.com because that one - and github.com itself -
+    are unreachable on some networks (hosts-file entries, corporate filters,
+    regional blocks), while api.github.com almost always answers:
 
-      irm https://raw.githubusercontent.com/shl722112752-ui/hermes-startup-animation/main/get.ps1 | iex
+      $u = 'https://api.github.com/repos/shl722112752-ui/hermes-startup-animation/contents/get.ps1'
+      irm -Headers @{ Accept = 'application/vnd.github.raw' } $u -OutFile "$env:TEMP\get.ps1"
+      notepad "$env:TEMP\get.ps1"
+      powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\get.ps1"
 
-    Or download it first and read it before running anything:
+    Where raw.githubusercontent.com is reachable, this shorter pair is equivalent:
 
-      irm https://raw.githubusercontent.com/shl722112752-ui/hermes-startup-animation/main/get.ps1 -OutFile get.ps1
-      notepad get.ps1
-      powershell -ExecutionPolicy Bypass -File get.ps1
+      irm https://raw.githubusercontent.com/shl722112752-ui/hermes-startup-animation/main/get.ps1 -OutFile "$env:TEMP\get.ps1"
+      powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\get.ps1"
 
     Optional parameters (only meaningful when you run this as a file):
 
@@ -72,20 +77,30 @@ $headers = @{ 'Accept' = 'application/vnd.github+json'; 'User-Agent' = 'hermes-s
 # some networks (hosts-file hacks, corporate filters, regional blocks) cannot
 # reach; the API host is usually still fine, so try the API asset endpoint first
 # and fall back to the plain URL. Two tries each, then give up with instructions.
+# Each attempt is capped at 120s: the package is ~330 KB, so that is a very slow
+# link already, while a blocked host can no longer look like a hang for minutes.
 function Save-Asset($asset, [string] $dest) {
+  $timeoutSec = 120
   $attempts = @(
-    @{ uri = "$apiBase/releases/assets/$($asset.id)"; headers = @{ 'Accept' = 'application/octet-stream'; 'User-Agent' = 'hermes-startup-animation-get' } },
-    @{ uri = $asset.browser_download_url; headers = @{ 'User-Agent' = 'hermes-startup-animation-get' } }
+    @{ name = 'api.github.com'; uri = "$apiBase/releases/assets/$($asset.id)"; headers = @{ 'Accept' = 'application/octet-stream'; 'User-Agent' = 'hermes-startup-animation-get' } },
+    @{ name = 'github.com'; uri = $asset.browser_download_url; headers = @{ 'User-Agent' = 'hermes-startup-animation-get' } }
   )
   $last = 'unknown error'
   foreach ($a in $attempts) {
     foreach ($try in 1, 2) {
+      Info ("  downloading via {0} (attempt {1}/2, timeout {2}s)" -f $a.name, $try, $timeoutSec)
+      $sw = [Diagnostics.Stopwatch]::StartNew()
       try {
-        Invoke-WebRequest -Uri $a.uri -Headers $a.headers -OutFile $dest -TimeoutSec 300 -MaximumRedirection 10
-        if ((Test-Path $dest) -and (Get-Item $dest).Length -gt 0) { return }
+        Invoke-WebRequest -Uri $a.uri -Headers $a.headers -OutFile $dest -TimeoutSec $timeoutSec -MaximumRedirection 10
+        if ((Test-Path $dest) -and (Get-Item $dest).Length -gt 0) {
+          Info ("  got {0:N0} bytes in {1:N1}s" -f (Get-Item $dest).Length, $sw.Elapsed.TotalSeconds)
+          return
+        }
         $last = "server returned an empty file ($($a.uri))"
+        Info "  server returned an empty file"
       } catch {
         $last = $_.Exception.Message
+        Info ("  failed after {0:N1}s: {1}" -f $sw.Elapsed.TotalSeconds, $last)
       }
       if (Test-Path $dest) { Remove-Item $dest -Force -ErrorAction SilentlyContinue }
       Start-Sleep -Seconds 2

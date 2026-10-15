@@ -42,26 +42,36 @@ Hermes Agent CN 桌面版把界面**嵌在 exe 里**（Tauri + WebView2，走 `h
 
 **不需要管理员权限**，装完即用。三种方式，按偏好选一种。
 
-### 方式一：一条命令下载并安装（推荐）
+### 方式一：两条命令下载并安装（推荐）
 
 `get.ps1` 会取最新 Release 的 zip、**校验 SHA-256**（对比随 Release 一起发布的
 `SHA256SUMS.txt`）、解压，再用子进程运行 `install.ps1`：
 
 ```powershell
-irm https://raw.githubusercontent.com/shl722112752-ui/hermes-startup-animation/main/get.ps1 -OutFile "$env:TEMP\get.ps1"
-powershell -ExecutionPolicy Bypass -File "$env:TEMP\get.ps1"
+$u = 'https://api.github.com/repos/shl722112752-ui/hermes-startup-animation/contents/get.ps1'
+irm -Headers @{ Accept = 'application/vnd.github.raw' } $u -OutFile "$env:TEMP\get.ps1"
+notepad "$env:TEMP\get.ps1"     # 想先看一眼代码就是这一步，不看可跳过
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\get.ps1"
 ```
 
-想少一步也可以（脚本内容同上，直接执行）：
+这里走 `api.github.com` 而不是 `raw.githubusercontent.com`，是因为有些网络（hosts 改写、
+公司过滤、区域封锁）连不上 `github.com` 和 `raw`，但 API 主机通常还能通。脚本下载 zip 时
+用的是同一套策略：先试 API 通道，失败再退回 `github.com` 链接。
+
+`raw.githubusercontent.com` 能通的网络，这两行完全等价：
 
 ```powershell
-irm https://raw.githubusercontent.com/shl722112752-ui/hermes-startup-animation/main/get.ps1 | iex
+irm https://raw.githubusercontent.com/shl722112752-ui/hermes-startup-animation/main/get.ps1 -OutFile "$env:TEMP\get.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\get.ps1"
 ```
 
 可选参数：`-Version <tag>`（装指定版本，默认最新）、`-Repo 你的用户名/仓库名`（用 fork）、
 `-Dest D:\hsa`（解压后保留文件）、`-NoInstall`（只下载 + 校验 + 解压，先看一眼再装）、
 `-InstallArgs "-NoStartupEntry -SkipStart"`（透传给安装器）、`-SkipVerify`（跳过校验，不建议）。
-网络不通或校验失败时，脚本会打印原因和手动步骤，并**以退出码 1 干净退出**，不会留下半装状态。
+
+下载时会逐次打印「走哪个通道、第几次尝试、花了多久」，单次尝试上限 120 秒；连接被墙时
+最多等几分钟就会**以退出码 1 打印原因和手动步骤**，不会一直卡着不动。校验失败同理，
+不会留下半装状态。
 
 ### 方式二：手动下载（想先看一眼代码）
 
@@ -210,7 +220,7 @@ powershell -ExecutionPolicy Bypass -File uninstall.ps1 -Purge   # 连安装目�
 ## 目录结构
 
 ```
-get.ps1                         一条命令：下载 Release → 校验 SHA-256 → 解压 → 调 install.ps1
+get.ps1                          一键脚本：下载 Release → 校验 SHA-256 → 解压 → 调 install.ps1
 install.ps1 / uninstall.ps1     安装/卸载（幂等，自动发现环境）
 runtime/                        安装到 %LOCALAPPDATA%\HermesSplash 的内容
   supervisor.mjs                监督进程（自愈 + 前提条件自检）
@@ -240,8 +250,8 @@ tests/                          单元测试（node:test，`node --test` 直接�
   通用变量，本机其它 WebView2 应用也会带上它（端口 0 时它们各自随机，互不干扰）。
 - **下载来的东西是可校验的**：每个 Release 都附 `SHA256SUMS.txt`，`get.ps1` 在安装前会比对
   zip 的 SHA-256，不一致就中止；校验失败或网络不通时它只报错退出，不会留下半装状态。
-  想先审脚本就把它落盘再看（`irm … -OutFile get.ps1`），`irm … | iex` 跑的是同一个脚本，
-  只是省了落盘这一步。
+  脚本推荐「先落盘、看一眼、再运行」（见[方式一](#方式一两条命令下载并安装推荐)），
+  这样你在执行前能读到它要做的每一件事；单次下载尝试 120 秒封顶，连不通会很快报错而不是僵住。
 - **发布物里没有生成物**：zip 里不含 `config.json` / `paths.json` / `splash-bundle.js`，
   这些都在你的机器上由安装器现场生成；安装器也从不覆盖已有的 `config.json`。
 - 卸载会移除这个变量（仅当它仍是本项目写入的形态）。
