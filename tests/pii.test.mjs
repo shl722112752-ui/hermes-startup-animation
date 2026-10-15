@@ -150,7 +150,18 @@ test('没有写死某台机器的用户目录', () => {
 })
 
 test('没有带非 ASCII 字符的绝对路径（中文用户名会这样泄露）', () => {
-  const bad = hits(/[A-Za-z]:\\{1,2}[^\s"'>]*[^\x00-\x7f]/).filter((h) => !/[<>%]/.test(h.text))
+  const bad = hits(/[A-Za-z]:\\{1,2}[^\s"'`>()\]]*/).filter((h) => {
+    const tail = h.match.replace(/^[A-Za-z]:\\{1,2}/, '')
+    const i = tail.search(/[^\x00-\x7f]/)
+    if (i === -1) return false
+    // 路径后面紧跟中文标点是正常的（“… `D:\hsa`（解压后保留）”），只有中文**字**才算泄露
+    const cp = tail.codePointAt(i)
+    const punct =
+      (cp >= 0x2018 && cp <= 0x201f) || // 弯引号、破折号
+      (cp >= 0x3000 && cp <= 0x303f) || // 中文标点（，。、（）等）
+      (cp >= 0xff00 && cp <= 0xffef) // 全角形式
+    return !punct
+  })
   assert.equal(bad.length, 0, `发现含非 ASCII 的绝对路径：\n${describe(bad)}`)
 })
 
