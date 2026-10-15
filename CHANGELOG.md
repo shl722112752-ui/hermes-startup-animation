@@ -3,14 +3,21 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.3] - 2026-10-15
+
+### 修复
+
+- 1.0.2 的 CHANGELOG 条目在描述改动时把作者的真实姓名又写了一遍，导致发布包里依然能找到它。
+  本条目改为不引用原署名。`v1.0.0`、`v1.0.1`、`v1.0.2` 三个发布包的 `LICENSE` / CHANGELOG
+  中仍含旧署名，仓库的旧提交里也是（git 历史不重写）；需要时请把这三个版本的附件重新上传为新构建。
+
 ## [1.0.2] - 2026-10-15
 
 ### 变更
 
-- **版权行与技能署名改用 GitHub 用户名**：`LICENSE` 的
-  `Copyright (c) 2026 shl722112752-ui and contributors` 改为 `shl722112752-ui and contributors`；
-  `skill/hermes-startup-animation/SKILL.md` 的 `author` 同步为 `shl722112752-ui, Hermes Agent`。
-  仓库与发布包里不再出现作者的真实姓名。
+- **版权行与技能署名改用 GitHub 用户名**：`LICENSE` 的版权行署名人改为 `shl722112752-ui`
+  （原为作者真实姓名）；`skill/hermes-startup-animation/SKILL.md` 的 `author` 同步为
+  `shl722112752-ui, Hermes Agent`。当前源码与之后发布的包里不再出现作者的真实姓名。
 - 上游作者署名照旧：`LICENSE` 附注与 [NOTICE.md](NOTICE.md) 里 `hermes-startup-screen` /
   `dsh-startup-screen` 的作者（沈宏厚）及其 MIT 许可不受本次改动影响，第三方素材的声明也保持不变。
 
@@ -80,6 +87,7 @@
 - **注入进程被外部杀掉后静默失效**：现在由监督进程 + 计划任务两层兜底。
 - 设置面板保存失败时给出明确提示；交互动画停住时面板仍可打开（层级在动画之上）。
 
+[1.0.3]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/shl722112752-ui/hermes-startup-animation/releases/tag/v1.0.0
