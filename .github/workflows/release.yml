@@ -33,6 +33,11 @@ jobs:
           node runtime/build-bundle.mjs
           node --test
           if ($LASTEXITCODE -ne 0) { throw 'unit tests failed' }
+          foreach ($f in 'install.ps1', 'uninstall.ps1', 'get.ps1') {
+            $errs = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$null, [ref]$errs)
+            if ($errs) { throw "$f does not parse" }
+          }
 
       - name: Pack
         shell: pwsh
@@ -48,15 +53,28 @@ jobs:
           Compress-Archive -Path $stage -DestinationPath "$stage.zip" -Force
           Write-Host "packed $stage.zip"
 
+      - name: Checksums
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem hermes-startup-animation-*.zip | Select-Object -First 1
+          $hash = (Get-FileHash $zip.FullName -Algorithm SHA256).Hash.ToLower()
+          $line = "{0}  {1}" -f $hash, $zip.Name
+          [System.IO.File]::WriteAllText((Join-Path $PWD 'SHA256SUMS.txt'), $line + "`n", [System.Text.Encoding]::ASCII)
+          Get-Content SHA256SUMS.txt | Write-Host
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: package
-          path: hermes-startup-animation-*.zip
+          path: |
+            hermes-startup-animation-*.zip
+            SHA256SUMS.txt
 
       - name: Create release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          files: hermes-startup-animation-*.zip
+          files: |
+            hermes-startup-animation-*.zip
+            SHA256SUMS.txt
           generate_release_notes: true

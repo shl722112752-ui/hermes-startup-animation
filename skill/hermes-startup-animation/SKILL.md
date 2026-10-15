@@ -1,7 +1,7 @@
 ---
 name: hermes-startup-animation
 description: "在 Hermes 内开关与调整桌面启动动画（自动/交互）。"
-version: 1.4.2
+version: 1.4.3
 author: shl722112752-ui, Hermes Agent
 license: MIT
 platforms: [windows]
@@ -83,7 +83,7 @@ terminal(command='& "$env:LOCALAPPDATA\HermesSplash\hermes-splash.cmd" interacti
 | `hermes-splash get <key>` | 读一项的生效值 |
 | `hermes-splash now` | 让改动**立刻**生效：重载 Hermes 窗口，动画会重播一次 |
 | `hermes-splash restart` | 重启监督进程（连带重启注入进程；改完源码想立刻生效时用） |
-| `hermes-splash doctor` | 13 项只读自检（条件项 SKIP 不算失败）；非 0 退出码表示有不通过项 |
+| `hermes-splash doctor` | 只读自检（12 项；Hermes 窗口开着时 13 项。条件项 SKIP 不算失败）；非 0 退出码表示有不通过项 |
 | `hermes-splash reset` | 恢复内置默认（旧文件按时间戳备份成 `config.json.<时间>.bak`） |
 | `hermes-splash dsh` | 从本地 `dsh-startup.json` 导入设置 |
 

@@ -3,6 +3,33 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.4] - 2026-10-15
+
+### 新增
+
+- **`get.ps1`：一条命令装完**。取最新 Release 的 zip → 比对 `SHA256SUMS.txt` 里的 SHA-256 →
+  解压 → 用**子进程**运行 `install.ps1`（所以 `install.ps1` 的 `exit` 不会关掉你的终端）。
+  支持 `-Version` / `-Repo`（fork）/ `-Dest` / `-InstallArgs` / `-SkipVerify`；网络不通或校验
+  失败时只报错并打印手动步骤，不留半装状态。
+- **Release 附带 `SHA256SUMS.txt`**：打包时生成 `hermes-startup-animation-<tag>.zip` 的校验和，
+  手动下载也能核对。
+- **`tests/pii.test.mjs`：个人信息护栏**。扫描仓库里所有被跟踪（及新增未提交）的文本文件，
+  禁止：非白名单邮箱（允许 GitHub 匿名邮箱 / `github.com` / `example.*`）、写死的用户目录、
+  含非 ASCII 字符的绝对路径、手机号 / 身份证号、各类凭据与私钥；并断言本机生成物
+  （`config.json` / `paths.json` / `splash-bundle.js`）没被 git 跟踪。可用环境变量
+  `HSS_PII_DENY` 传自定义黑名单，本地发布前跑一次即可。
+
+### 变更
+
+- **README 安装章节重写**为三种方式：一条命令（`get.ps1`）、手动下载并校验、`git clone`；
+  新增「安装器做了什么，失败会怎样」，明确失败只影响动画、不动 Hermes 本体，并给出回退方式。
+- 安全说明补充：下载物可校验、发布包里不含任何生成物、`irm … | iex` 与落盘再跑是同一个脚本。
+
+### 修复
+
+- 修正 1.0.3 条目里已经过时的说法：`v1.0.0`–`v1.0.3` 四个 Release 的附件都已用清理后的源码
+  重新构建并替换（附件与仓库源码里都不再出现旧署名），无需再重新上传。
+
 ## [1.0.3] - 2026-10-15
 
 ### 修复
@@ -87,6 +114,7 @@
 - **注入进程被外部杀掉后静默失效**：现在由监督进程 + 计划任务两层兜底。
 - 设置面板保存失败时给出明确提示；交互动画停住时面板仍可打开（层级在动画之上）。
 
+[1.0.4]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.0...v1.0.1

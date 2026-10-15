@@ -43,7 +43,7 @@ jobs:
         shell: pwsh
         run: |
           $bad = 0
-          foreach ($f in 'install.ps1', 'uninstall.ps1') {
+          foreach ($f in 'install.ps1', 'uninstall.ps1', 'get.ps1') {
             $errs = $null
             [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$null, [ref]$errs)
             if ($errs) { $errs | ForEach-Object { Write-Host "$f : $_" }; $bad++ }

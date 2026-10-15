@@ -40,9 +40,46 @@ Hermes Agent CN 桌面版把界面**嵌在 exe 里**（Tauri + WebView2，走 `h
 
 ## 安装
 
-**不需要管理员权限**，装完即用。
+**不需要管理员权限**，装完即用。三种方式，按偏好选一种。
 
-### 一键（推荐）
+### 方式一：一条命令下载并安装（推荐）
+
+`get.ps1` 会取最新 Release 的 zip、**校验 SHA-256**（对比随 Release 一起发布的
+`SHA256SUMS.txt`）、解压，再用子进程运行 `install.ps1`：
+
+```powershell
+irm https://raw.githubusercontent.com/shl722112752-ui/hermes-startup-animation/main/get.ps1 -OutFile "$env:TEMP\get.ps1"
+powershell -ExecutionPolicy Bypass -File "$env:TEMP\get.ps1"
+```
+
+想少一步也可以（脚本内容同上，直接执行）：
+
+```powershell
+irm https://raw.githubusercontent.com/shl722112752-ui/hermes-startup-animation/main/get.ps1 | iex
+```
+
+可选参数：`-Version v1.0.4` 装指定版本、`-Repo 你的用户名/仓库名` 用 fork、
+`-Dest D:\hsa` 解压后保留文件、`-InstallArgs "-NoStartupEntry -SkipStart"` 透传给安装器、
+`-SkipVerify` 跳过校验（不建议）。网络不通时脚本会打印手动步骤，不会中断你的终端。
+
+### 方式二：手动下载（想先看一眼代码）
+
+1. 打开 [Releases](https://github.com/shl722112752-ui/hermes-startup-animation/releases)，
+   下载 `hermes-startup-animation-<版本>.zip` 和 `SHA256SUMS.txt`。
+2. 校验：
+
+   ```powershell
+   Get-FileHash .\hermes-startup-animation-v1.0.4.zip -Algorithm SHA256
+   ```
+
+   和 `SHA256SUMS.txt` 里对应那行比对，一致再继续。
+3. 解压后运行：
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\hermes-startup-animation-v1.0.4\install.ps1
+   ```
+
+### 方式三：git clone（想跟主分支）
 
 ```powershell
 git clone https://github.com/shl722112752-ui/hermes-startup-animation.git
@@ -50,20 +87,17 @@ cd hermes-startup-animation
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
-没有 git 也可以：
-
-```powershell
-$z = "$env:TEMP\hsa.zip"
-Invoke-WebRequest https://github.com/shl722112752-ui/hermes-startup-animation/archive/refs/heads/main.zip -OutFile $z
-Expand-Archive $z "$env:TEMP\hsa" -Force
-powershell -ExecutionPolicy Bypass -File "$env:TEMP\hsa\hermes-startup-animation-main\install.ps1"
-```
+### 安装器做了什么，失败会怎样
 
 安装器会自己找到 Hermes 安装目录、`HERMES_HOME` 和可用的 Node，然后：
-装上运行时 → 把设置面板需要的启动器按本机情况生成 → 设置调试端口环境变量 →
-放进「启动」文件夹 → 注册计划任务 → 立刻启动 → 跑一遍自检（12 项；Hermes 窗口开着时 13 项）。
+装上运行时 → 按本机情况生成启动器 → 设置调试端口环境变量 → 放进「启动」文件夹 →
+注册计划任务 → 立刻启动 → 跑一遍自检（12 项；Hermes 窗口开着时 13 项）。
 
-结束后**启动一次 Hermes** 就能看到动画（脚本运行前就已经开着的那个窗口不会补播）。
+- 装完 **启动一次 Hermes** 就能看到动画（安装前已经开着的窗口不会补播）。
+- 任何一步失败都只会让安装器**以非 0 退出码结束并说明原因**，不会碰 Hermes 本体；
+  Hermes 照常启动，只是没有动画。用 `get.ps1` 安装时失败也不会关掉你的终端窗口。
+- 想先小范围试：`-NoStartupEntry -NoTask -SkipStart` 只装运行时，不动自启。
+- 反悔：跑同目录的 `uninstall.ps1`（加 `-Purge` 连安装目录一起删）。
 
 ### 常用参数
 
@@ -117,7 +151,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -NoStartupEntry -NoTask -Sk
 | `get <key>` / `set <key>=<value>` | 读写单项 |
 | `now` | 让改动立刻生效（重载窗口，动画重播一次） |
 | `restart` | 重启监督进程（连带重启注入进程） |
-| `doctor` | 13 项只读自检（条件项在 Hermes 未运行时报 SKIP，不算失败） |
+| `doctor` | 只读自检（12 项；Hermes 窗口开着时 13 项，多一项「能解析到调试端口」） |
 | `reset` | 恢复默认值 |
 | `dsh` | 从本机 DSH 的 `dsh-startup.json` 导入设置 |
 
@@ -175,6 +209,7 @@ powershell -ExecutionPolicy Bypass -File uninstall.ps1 -Purge   # 连安装目�
 ## 目录结构
 
 ```
+get.ps1                         一条命令：下载 Release → 校验 SHA-256 → 解压 → 调 install.ps1
 install.ps1 / uninstall.ps1     安装/卸载（幂等，自动发现环境）
 runtime/                        安装到 %LOCALAPPDATA%\HermesSplash 的内容
   supervisor.mjs                监督进程（自愈 + 前提条件自检）
@@ -202,6 +237,12 @@ tests/                          单元测试（node:test，`node --test` 直接�
   本机任意进程仍然可以直接读写 `config.json`——不接受这个前提就不要装。
 - 本项目需要用户级环境变量 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`。它是 WebView2 的
   通用变量，本机其它 WebView2 应用也会带上它（端口 0 时它们各自随机，互不干扰）。
+- **下载来的东西是可校验的**：每个 Release 都附 `SHA256SUMS.txt`，`get.ps1` 在安装前会比对
+  zip 的 SHA-256，不一致就中止；校验失败或网络不通时它只报错退出，不会留下半装状态。
+  想先审脚本就把它落盘再看（`irm … -OutFile get.ps1`），`irm … | iex` 跑的是同一个脚本，
+  只是省了落盘这一步。
+- **发布物里没有生成物**：zip 里不含 `config.json` / `paths.json` / `splash-bundle.js`，
+  这些都在你的机器上由安装器现场生成；安装器也从不覆盖已有的 `config.json`。
 - 卸载会移除这个变量（仅当它仍是本项目写入的形态）。
 
 ## 贡献

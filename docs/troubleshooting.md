@@ -6,11 +6,35 @@
 
 ```powershell
 $h = "$env:LOCALAPPDATA\HermesSplash\hermes-splash.cmd"
-& $h doctor      # 13 项只读自检
+& $h doctor      # 只读自检（12 项；Hermes 窗口开着时 13 项）
 & $h status      # 监督进程 / 注入进程 / 调试端口 / 当前是否在播
 ```
 
 日志：`%LOCALAPPDATA%\HermesSplash\supervisor.log` 和 `watcher.log`。
+
+---
+
+## 下载 / 安装失败
+
+先分清是**装之前**失败还是**装之后**不工作（装之后见下一节）。
+
+- **`get.ps1` 报「Could not read the release list」**：多半是网络或 TLS。脚本已强制 TLS 1.2；
+  仍不行就手动下载（见 README「方式二」）——它原本就会打印这几步。
+- **`get.ps1` 报校验和不一致**：不要跳过校验去装。先删掉临时目录重下一次
+  （GitHub 的 Release 资源偶尔会被网络中间层截断）；仍不一致就用 README「方式二」手动核对。
+- **`install.ps1` 以非 0 退出码结束**：脚本自己会打印是第几步失败：
+  - `a Node` / `Node.js 22.4 or newer is required`：用 `-NodePath <node.exe>` 指一个 ≥ 22.4 的 Node，
+    或先装 Node 22 LTS。注入进程用的是 Node 的全局 `WebSocket`。
+  - `Hermes` / `could not locate`：Hermes 装在非常规位置时用
+    `-HermesDir "D:\Apps\Hermes Agent CN Desktop"`（换成你的实际路径）。
+  - `Windows Script Host`：本机 wscript.exe 被组策略/杀软禁用了，自启项会形同虚设。
+    要么放行 WSH，要么用 `-NoStartupEntry -NoTask -SkipStart` 只装运行时自己启动。
+  - 自检项 FAIL：按 `doctor` 的输出逐条处理，那几项本身就是诊断提示。
+- **装完想退**：`uninstall.ps1`；加 `-Purge` 连 `%LOCALAPPDATA%\HermesSplash` 一起删
+  （它只在这个目录确实是本项目安装目录时才删）。
+
+安装失败**不会**影响 Hermes 本身：安装器只写 `%LOCALAPPDATA%\HermesSplash`、
+启动项、计划任务和那个用户级环境变量，从不改应用目录。
 
 ---
 

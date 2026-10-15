@@ -82,7 +82,7 @@ test('coerceValue: colours must be hex (regression: the check used to be skipped
 
 test('coerceValue: free-form text passes through, empties do not', () => {
   assert.equal(coerceValue('brand1', 'HERMES'), 'HERMES')
-  assert.equal(coerceValue('identityId', '23D126'), '23D126')
+  assert.equal(coerceValue('identityId', 'ZX81QK'), 'ZX81QK')
   assert.equal(coerceValue('brand1', 42), '42', 'non-strings are stringified')
   assert.equal(coerceValue('brand1', ''), '', 'an explicit empty string is allowed')
   assert.throws(() => coerceValue('brand1', null), /不能为空/)
