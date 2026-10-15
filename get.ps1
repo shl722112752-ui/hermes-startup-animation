@@ -49,7 +49,14 @@ $ErrorActionPreference = 'Stop'
 function Info([string] $m) { Write-Host $m }
 function Warn([string] $m) { Write-Host "WARNING: $m" -ForegroundColor Yellow }
 function Die([string] $m) {
-  # throw instead of exit: with "irm | iex" an exit would close the user's console
+  # Run as a file: exit with a clean one-line error (a thrown exception would dump
+  # a stack trace, which looks like a crash). Run through "irm | iex": throwing is
+  # the only safe option, because "exit" would close the user's console.
+  if ($PSCommandPath) {
+    Write-Host ''
+    Write-Host "ERROR: $m" -ForegroundColor Red
+    exit 1
+  }
   throw $m
 }
 
@@ -139,7 +146,12 @@ if (-not (Test-Path $zipPath)) { Die "Download produced no file at $zipPath" }
 if ($SkipVerify) {
   Warn "checksum verification skipped on request"
 } elseif (-not $sumAsset) {
-  Die "SHA256SUMS.txt is missing from release $tag and -SkipVerify was not given. Refusing to install unverified bits."
+  Die @"
+Release $tag has no SHA256SUMS.txt, so the download cannot be verified.
+Nothing was installed. Either take an older release that ships a checksum, pass
+-SkipVerify if you accept the risk, or download by hand and check the archive:
+  https://github.com/$Repo/releases
+"@
 } else {
   $sumPath = Join-Path $work 'SHA256SUMS.txt'
   try {

@@ -3,6 +3,16 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.5] - 2026-10-15
+
+### 修复
+
+- `get.ps1` 失败时不再抛异常打印堆栈（那看起来像崩了）：作为脚本文件运行时改为
+  **打印一行 `ERROR: …` 并以退出码 1 结束**；只有在 `irm … | iex` 这种没有脚本文件的
+  场景才仍旧抛出（否则 `exit` 会关掉用户的终端窗口）。
+- `get.ps1` 遇到「该 Release 没有 SHA256SUMS.txt」时，除了拒绝安装，还会给出手动下载
+  地址与 `-SkipVerify` 的说明。
+
 ## [1.0.4] - 2026-10-15
 
 ### 新增
@@ -114,6 +124,7 @@
 - **注入进程被外部杀掉后静默失效**：现在由监督进程 + 计划任务两层兜底。
 - 设置面板保存失败时给出明确提示；交互动画停住时面板仍可打开（层级在动画之上）。
 
+[1.0.5]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.1...v1.0.2
