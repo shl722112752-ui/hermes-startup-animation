@@ -418,7 +418,13 @@ Step '8. starting it'
 if ($SkipStart) {
   Say '  skipped (-SkipStart)'
 } else {
-  & wscript.exe $vbsPath
+  # Start-Process (unlike "& wscript.exe") goes through ShellExecute, so the
+  # launcher - and the supervisor + watcher it spawns, which live for days - do
+  # not inherit our stdout/stderr. With inherited handles, any caller that
+  # captures our output (get.ps1, a script, CI) would block on that pipe until
+  # the supervisor exits, i.e. forever.
+  Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\wscript.exe') `
+    -ArgumentList ('"' + $vbsPath + '"')
   Start-Sleep -Seconds 5
 }
 

@@ -3,6 +3,15 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.6] - 2026-10-15
+
+### 修复
+
+- **安装器第 8 步改用 `Start-Process` 启动监督进程**。原先用 `& wscript.exe <vbs>`，
+  子进程会继承安装器的 stdout/stderr；监督进程与注入进程要活好几天，于是那条管道一直不关，
+  **任何捕获安装器输出的调用方（脚本、CI、`get.ps1`）都会一直等到监督进程退出（等于永远挂着）**。
+  `Start-Process` 走 ShellExecute，不再继承句柄 —— 实测同一调用从「600 秒超时」变成 7.7 秒完成。
+
 ## [1.0.5] - 2026-10-15
 
 ### 修复
@@ -124,6 +133,7 @@
 - **注入进程被外部杀掉后静默失效**：现在由监督进程 + 计划任务两层兜底。
 - 设置面板保存失败时给出明确提示；交互动画停住时面板仍可打开（层级在动画之上）。
 
+[1.0.6]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/shl722112752-ui/hermes-startup-animation/compare/v1.0.2...v1.0.3
