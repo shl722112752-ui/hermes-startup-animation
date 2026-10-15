@@ -43,4 +43,4 @@
 - **注入进程被外部杀掉后静默失效**：现在由监督进程 + 计划任务两层兜底。
 - 设置面板保存失败时给出明确提示；交互动画停住时面板仍可打开（层级在动画之上）。
 
-[1.0.0]: https://github.com/OWNER/hermes-startup-animation/releases/tag/v1.0.0
+[1.0.0]: https://github.com/shl722112752-ui/hermes-startup-animation/releases/tag/v1.0.0

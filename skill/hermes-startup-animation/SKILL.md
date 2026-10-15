@@ -1,7 +1,7 @@
 ---
 name: hermes-startup-animation
 description: "在 Hermes 内开关与调整桌面启动动画（自动/交互）。"
-version: 1.4.0
+version: 1.4.1
 author: shl722112752-ui, Hermes Agent
 license: MIT
 platforms: [windows]
@@ -83,7 +83,7 @@ terminal(command='& "$env:LOCALAPPDATA\HermesSplash\hermes-splash.cmd" interacti
 | `hermes-splash get <key>` | 读一项的生效值 |
 | `hermes-splash now` | 让改动**立刻**生效：重载 Hermes 窗口，动画会重播一次 |
 | `hermes-splash restart` | 重启监督进程（连带重启注入进程；改完源码想立刻生效时用） |
-| `hermes-splash doctor` | 12 项只读自检；非 0 退出码表示有不通过项 |
+| `hermes-splash doctor` | 13 项只读自检（条件项 SKIP 不算失败）；非 0 退出码表示有不通过项 |
 | `hermes-splash reset` | 恢复内置默认（旧文件备份成 `config.json.bak`） |
 | `hermes-splash dsh` | 从本地 `dsh-startup.json` 导入设置 |
 
@@ -147,11 +147,11 @@ terminal(command='& "$env:LOCALAPPDATA\HermesSplash\hermes-splash.cmd" interacti
 正常情况下**已经自动修好了**（注入进程 2 秒、监督进程 ≤2 分钟、前提条件 ≤60 秒）。
 所以先读现状，别急着改东西：
 
-1. `hermes-splash doctor` ——12 项自检。它是**只读诊断**，不修东西：
+1. `hermes-splash doctor` ——13 项自检。它是**只读诊断**，不修东西：
    - 监督进程 / 注入进程 FAIL → 系统会自己拉起来；想立刻恢复用 `hermes-splash restart`
    - 登录自启 FAIL → `install.ps1` 会补齐（把 `hermes-splash-supervisor.vbs` 放进「启动」文件夹）
    - 调试端口 FAIL → 监督进程会自动补环境变量，但**要下次启动 Hermes 才生效**
-   - 看门狗计划任务 FAIL → `install-watchdog.ps1`
+   - 看门狗计划任务 FAIL → 重跑 `install.ps1`（它会用 `-Force` 重新注册计划任务）
 2. `hermes-splash get enabled` ——`false` 就是被关了，`hermes-splash on`。
 3. 看日志（`doctor` 打印尾部，或 `read_file` 读 `$HSS\supervisor.log` 与 `$HSS\watcher.log`）：
    - `supervisor.log` 有 `watcher spawned (pid …)` 紧跟一次 `watcher exited` → 正在自愈，正常
@@ -294,7 +294,8 @@ DSH 的 `always` 是「每次浏览器刷新都播」，桌面上每次启动播
 
 全部通过 =
 
-1. `hermes-splash doctor` 退出码 0，12 项全 OK（含监督进程、注入进程、设置面板 API、看门狗任务）。
+1. `hermes-splash doctor` 退出码 0，13 项全 OK（Hermes 未运行时那一项条件检查报 SKIP，
+   不算失败；含监督进程、注入进程、设置面板 API、看门狗任务）。
 2. `hermes-splash get requireInteraction` 等于你刚设的值。
 3. 重启 Hermes（或 `hermes-splash now`）后看得见动画：
    - `auto` → 六幕一路播到揭幕，约 24 秒（`speed: 1`）

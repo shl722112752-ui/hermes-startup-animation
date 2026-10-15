@@ -106,7 +106,7 @@ export function coerceValue(key, raw) {
     if (!ENUMS[key].includes(v)) throw new Error(`${key} 只能是 ${ENUMS[key].join(' / ')}`)
     return v
   }
-  if (COLORS[key]) {
+  if (COLORS.includes(key)) {
     const v = String(raw).trim()
     if (!/^#[0-9a-f]{3,8}$/i.test(v)) throw new Error(`${key} 必须是 #rrggbb 形式`)
     return v

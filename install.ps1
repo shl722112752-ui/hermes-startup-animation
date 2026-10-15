@@ -51,6 +51,19 @@ function Say([string]$msg) { if (-not $Quiet) { Write-Host $msg } }
 function Step([string]$msg) { Write-Host ''; Write-Host "=== $msg ===" }
 function Fail([string]$msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
 
+# Probe Windows Script Host by actually running a tiny script: when WSH is disabled
+# by policy the .exe is still present but every launch fails.
+function Test-Wsh {
+  $exe = Join-Path $env:SystemRoot 'System32\wscript.exe'
+  if (-not (Test-Path $exe)) { return $false }
+  $probe = Join-Path $env:TEMP ("hsa-wsh-{0}.vbs" -f $PID)
+  try {
+    [System.IO.File]::WriteAllText($probe, 'WScript.Quit 0', [System.Text.Encoding]::ASCII)
+    $p = Start-Process -FilePath $exe -ArgumentList ('"' + $probe + '"') -Wait -PassThru -WindowStyle Hidden
+    return ($p.ExitCode -eq 0)
+  } catch { return $false } finally { Remove-Item $probe -Force -ErrorAction SilentlyContinue }
+}
+
 # Write text with an exact encoding. Windows PowerShell 5.1's -Encoding UTF8 adds
 # a BOM, which breaks JSON.parse in Node, so write UTF-8 without BOM by hand.
 function Write-Text([string]$Path, [string]$Text, [string]$Kind) {
@@ -62,12 +75,17 @@ function Write-Text([string]$Path, [string]$Text, [string]$Kind) {
   }
 }
 
+# Oldest Node that works: the injector and the settings CLI use the global
+# WebSocket, which only became available unflagged in Node 22.4. A 22.0-22.3
+# install would look fine and then fail at runtime with "WebSocket is not defined".
+$MinNode = [version]'22.4'
+
 function Get-NodeVersion([string]$exe) {
   try {
     $v = (& $exe -v 2>$null)
-    if ($v -match '^v(\d+)\.') { return [int]$Matches[1] }
+    if ($v -match '^v(\d+\.\d+\.\d+)') { return [version]$Matches[1] }
   } catch { }
-  return 0
+  return $null
 }
 
 # ---------------------------------------------------------------- discovery --
@@ -124,8 +142,17 @@ if (-not $DshConfig -and $env:DSH_HOME) {
 if ($DshConfig) { Say "  dsh config  : $DshConfig" }
 
 Step '2. locating Node'
-if ($NodePath -and (Test-Path $NodePath)) { $nodeMajor = Get-NodeVersion $NodePath }
-if (-not $NodePath) {
+$nodeVersion = $null
+if ($NodePath) {
+  # An explicit -NodePath is a promise, so verify it instead of silently falling
+  # back to a different Node (which used to leave $nodeMajor unset and print "v").
+  if (-not (Test-Path $NodePath)) { Fail "-NodePath '$NodePath' does not exist." }
+  $nodeVersion = Get-NodeVersion $NodePath
+  if (-not $nodeVersion -or $nodeVersion -lt $MinNode) {
+    $shown = if ($nodeVersion) { "v$nodeVersion" } else { 'not a usable node.exe' }
+    Fail "-NodePath '$NodePath' is $shown - Node.js $MinNode or newer is required (the injector uses the global WebSocket API)."
+  }
+} else {
   $cands = @()
   $onPath = Get-Command node.exe -ErrorAction SilentlyContinue
   if ($onPath) { $cands += $onPath.Source }
@@ -142,15 +169,15 @@ if (-not $NodePath) {
   }
   foreach ($c in $cands) {
     if ($c -and (Test-Path $c)) {
-      $maj = Get-NodeVersion $c
-      if ($maj -ge 22) { $NodePath = $c; $nodeMajor = $maj; break }
+      $v = Get-NodeVersion $c
+      if ($v -and $v -ge $MinNode) { $NodePath = $c; $nodeVersion = $v; break }
     }
   }
 }
-if (-not $NodePath) {
-  Fail "no Node.js >= 22 found (WebSocket is required). Install Node 22+, or pass -NodePath '<node.exe>'. Hermes usually ships one under data\versions\<ver>\node\node.exe."
+if (-not $NodePath -or -not $nodeVersion) {
+  Fail "no Node.js >= $MinNode found (the injector uses the global WebSocket API). Install Node 22.4+, or pass -NodePath '<node.exe>'. Hermes usually ships one under data\versions\<ver>\node\node.exe."
 }
-Say "  Node        : $NodePath (v$nodeMajor)"
+Say "  Node        : $NodePath (v$nodeVersion)"
 
 # ------------------------------------------------------------------- install --
 Step '3. installing runtime files'
@@ -182,10 +209,14 @@ Say "  copied runtime -> $InstallDir"
 Say "  config.json kept as-is: $(Test-Path (Join-Path $InstallDir 'config.json'))"
 
 # splash-bundle.js is a build artifact (not in the repository), so produce it now
-# instead of waiting for the supervisor to notice it is missing.
+# instead of waiting for the supervisor to notice it is missing. Drop any old
+# artifact first: build-bundle.mjs failing while a stale bundle is still on disk
+# would otherwise look like a successful build.
+$bundlePath = Join-Path $InstallDir 'splash-bundle.js'
+Remove-Item $bundlePath -Force -ErrorAction SilentlyContinue
 & $NodePath (Join-Path $InstallDir 'build-bundle.mjs') | Out-Null
-if (-not (Test-Path (Join-Path $InstallDir 'splash-bundle.js'))) {
-  Fail "could not build splash-bundle.js - run: node `"$InstallDir\build-bundle.mjs`""
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $bundlePath)) {
+  Fail "could not build splash-bundle.js (exit $LASTEXITCODE) - run: node `"$InstallDir\build-bundle.mjs`""
 }
 Say '  built splash-bundle.js'
 
@@ -200,6 +231,12 @@ $pathsObj = [ordered]@{
   cdpPort    = $CdpPort
   apiPort    = $ApiPort
   installedAt = (Get-Date).ToUniversalTime().ToString('s') + 'Z'
+  # Remember what this install deliberately skipped, so that `doctor` does not
+  # report a self-inflicted failure (which used to make a -NoTask install exit
+  # non-zero and look broken to scripts and CI).
+  skipStartupEntry = [bool]$NoStartupEntry
+  skipTask         = [bool]$NoTask
+  skipStart        = [bool]$SkipStart
 }
 Write-Text (Join-Path $InstallDir 'paths.json') ($pathsObj | ConvertTo-Json -Depth 4) 'Utf8NoBom'
 Say '  paths.json'
@@ -285,7 +322,13 @@ Write-Text $vbsPath $vbsLauncher 'Unicode'
 Say '  hermes-splash-supervisor.vbs'
 
 # --- settings CLI ----------------------------------------------------------
-# ANSI so cmd.exe decodes any non-ASCII path correctly.
+# UTF-8 without BOM, and `chcp 65001` early in the file. cmd.exe reads a batch
+# file line by line and decodes each line with the code page that is current at
+# that moment, so the ASCII prologue parses under the old code page and
+# everything after the chcp is read as UTF-8. Writing this as ANSI was a real
+# bug: with `chcp 65001` the ANSI-encoded non-ASCII NODE path was mangled, the
+# `if not exist "%NODE%"` test failed and the CLI silently fell back to whatever
+# `node` was on PATH.
 $cmd = @"
 @echo off
 REM Hermes startup-animation settings (generated by install.ps1)
@@ -298,7 +341,7 @@ if not defined NODE set "NODE=node"
 "%NODE%" "%~dp0config-cli.mjs" %*
 exit /b %ERRORLEVEL%
 "@.Replace('@@NODE@@', $NodePath)
-Write-Text (Join-Path $InstallDir 'hermes-splash.cmd') $cmd 'Ansi'
+Write-Text (Join-Path $InstallDir 'hermes-splash.cmd') $cmd 'Utf8NoBom'
 Say '  hermes-splash.cmd'
 
 Step '5. installing the Hermes skill'
@@ -335,6 +378,13 @@ if ($current -eq $EnvValue) {
 }
 
 Step '7. autostart'
+# Both autostart paths below need Windows Script Host: the Startup-folder .vbs and
+# the scheduled task that runs wscript.exe. Group policy or an antivirus product can
+# disable it, in which case the files land fine but nothing ever runs and the install
+# still looks successful. Probe it for real, but only when we are about to rely on it.
+if (-not ($NoStartupEntry -and $NoTask) -and -not (Test-Wsh)) {
+  Fail 'Windows Script Host (wscript.exe) cannot run, so autostart would silently do nothing. Re-enable it (group policy / antivirus), or re-run with -NoStartupEntry -NoTask and start the supervisor yourself.'
+}
 $StartupDir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup'
 if ($NoStartupEntry) {
   Say '  startup entry skipped'

@@ -45,7 +45,7 @@ Hermes Agent CN 桌面版把界面**嵌在 exe 里**（Tauri + WebView2，走 `h
 ### 一键（推荐）
 
 ```powershell
-git clone https://github.com/OWNER/hermes-startup-animation.git
+git clone https://github.com/shl722112752-ui/hermes-startup-animation.git
 cd hermes-startup-animation
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
@@ -54,14 +54,14 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 
 ```powershell
 $z = "$env:TEMP\hsa.zip"
-Invoke-WebRequest https://github.com/OWNER/hermes-startup-animation/archive/refs/heads/main.zip -OutFile $z
+Invoke-WebRequest https://github.com/shl722112752-ui/hermes-startup-animation/archive/refs/heads/main.zip -OutFile $z
 Expand-Archive $z "$env:TEMP\hsa" -Force
 powershell -ExecutionPolicy Bypass -File "$env:TEMP\hsa\hermes-startup-animation-main\install.ps1"
 ```
 
 安装器会自己找到 Hermes 安装目录、`HERMES_HOME` 和可用的 Node，然后：
 装上运行时 → 把设置面板需要的启动器按本机情况生成 → 设置调试端口环境变量 →
-放进「启动」文件夹 → 注册计划任务 → 立刻启动 → 跑一遍 12 项自检。
+放进「启动」文件夹 → 注册计划任务 → 立刻启动 → 跑一遍 13 项自检。
 
 结束后**启动一次 Hermes** 就能看到动画（脚本运行前就已经开着的那个窗口不会补播）。
 
@@ -117,7 +117,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -NoStartupEntry -NoTask -Sk
 | `get <key>` / `set <key>=<value>` | 读写单项 |
 | `now` | 让改动立刻生效（重载窗口，动画重播一次） |
 | `restart` | 重启监督进程（连带重启注入进程） |
-| `doctor` | 12 项只读自检 |
+| `doctor` | 13 项只读自检（条件项在 Hermes 未运行时报 SKIP，不算失败） |
 | `reset` | 恢复默认值 |
 | `dsh` | 从本机 DSH 的 `dsh-startup.json` 导入设置 |
 
@@ -195,8 +195,10 @@ docs/                           原理 / 配置 / 排障
   这样既不会和本机其它 WebView2 应用抢端口（实测被"微软电脑管家"抢走过固定端口，
   结果 Hermes 完全没有调试端口），也顺带让端口不可预测。
   用 `-CdpPort <n>` 可以改成固定端口，但**不推荐**。
-- 设置 API 固定监听 `127.0.0.1:9334`，**只监听回环**。本机任何进程都能借此改这份设置——
-  不接受这个前提就不要装。
+- 设置 API 监听 `127.0.0.1:9334`，**只监听回环**，且只接受来自 Hermes 窗口
+  （`hermesui://localhost` / `http://hermesui.localhost`）的跨源请求：别的网页对着这个
+  端口发 `fetch` 会被 403 挡掉（没有 `Origin` 头的本机脚本与 CLI 照常放行）。
+  本机任意进程仍然可以直接读写 `config.json`——不接受这个前提就不要装。
 - 本项目需要用户级环境变量 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`。它是 WebView2 的
   通用变量，本机其它 WebView2 应用也会带上它（端口 0 时它们各自随机，互不干扰）。
 - 卸载会移除这个变量（仅当它仍是本项目写入的形态）。
@@ -231,7 +233,7 @@ injected over the WebView2 DevTools protocol because the app's UI ships embedded
 and has no plugin host. The exe is never modified.
 
 ```powershell
-git clone https://github.com/OWNER/hermes-startup-animation.git
+git clone https://github.com/shl722112752-ui/hermes-startup-animation.git
 cd hermes-startup-animation
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```

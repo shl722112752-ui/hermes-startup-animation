@@ -32,6 +32,11 @@ const CONFIG_FILE = join(DIR, 'config.json')
 const BUNDLE_FILE = join(DIR, 'splash-bundle.js')
 
 const PATHS = readPaths(DIR)
+/* paths.json 存在但读不出来（损坏/半截）时必须能分辨出来：readPaths 会静默返回
+   {}，于是 ENV_VALUE 变成端口 0，把用户自己设的固定端口覆盖掉，同时
+   activePortFiles 因缺 hermesDir 返回空 → 永远连不上调试端口且没有任何提示。 */
+const PATHS_FILE = join(DIR, 'paths.json')
+const PATHS_BROKEN = existsSync(PATHS_FILE) && !PATHS.hermesDir
 const ENV_NAME = 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'
 /* cdpPort 0（默认）= 让 Chromium 自己挑空闲端口，不和本机其它 WebView2 应用抢端口 */
 const ENV_VALUE = `--remote-debugging-port=${Number(PATHS.cdpPort) > 0 ? Number(PATHS.cdpPort) : 0}`
@@ -76,12 +81,34 @@ function readPid(file) {
 }
 
 const LOCK_PORT = Number(process.env.HSS_LOCK_PORT || 9335)
-const lockServer = createServer((_req, res) => { res.writeHead(204); res.end() })
+/* 锁服务回一个带自己 pid 的头，这样别人占了同一个端口时能分辨出来。 */
+const lockServer = createServer((_req, res) => {
+  res.writeHead(204, { 'x-hermes-splash-supervisor': String(process.pid) })
+  res.end()
+})
+
+/* 端口被占 ≠ 已有监督进程：别的程序也可能占着 9335。以前无条件 exit(0)，
+   后果是监督进程永远起不来（计划任务每 2 分钟白跑一次），而 status/doctor
+   还显示「运行中」——假阳性比不启动更难查。这里问一下占用者是谁。 */
+async function lockHolderPid() {
+  try {
+    const res = await fetch(`http://127.0.0.1:${LOCK_PORT}/`, { signal: AbortSignal.timeout(1500) })
+    const pid = Number(res.headers.get('x-hermes-splash-supervisor'))
+    return Number.isFinite(pid) && pid > 0 ? pid : 0
+  } catch { return 0 }
+}
+
 await new Promise((resolve) => {
-  lockServer.once('error', (e) => {
+  lockServer.once('error', async (e) => {
     if (e.code === 'EADDRINUSE') {
-      log(`another supervisor is already running (lock port ${LOCK_PORT} busy), exiting`)
-      process.exit(0)
+      const owner = await lockHolderPid()
+      if (owner) {
+        log(`another supervisor is already running (pid ${owner}, lock port ${LOCK_PORT} busy), exiting`)
+        process.exit(0)
+      }
+      log(`WARNING: lock port ${LOCK_PORT} is busy but its holder is not a Hermes-splash supervisor - continuing without the single-instance lock`)
+      resolve()
+      return
     }
     log(`WARNING: could not take lock port ${LOCK_PORT}: ${e.message} (continuing anyway)`)
     resolve()
@@ -97,6 +124,10 @@ log(`supervisor started (pid ${process.pid}, lock ${LOCK_PORT})`)
    setx 会同时广播 WM_SETTINGCHANGE，所以之后从资源管理器启动的 Hermes 能拿到它。
    如果用户自己往里加了别的参数，就只记日志、不覆盖。 */
 function ensureEnvVar() {
+  if (PATHS_BROKEN) {
+    log('WARNING: paths.json is unreadable - not touching the debug-port env var (re-run install.ps1)')
+    return
+  }
   let current = null
   try {
     const out = execFileSync('reg', ['query', 'HKCU\\Environment', '/v', ENV_NAME], CAPTURE) || ''

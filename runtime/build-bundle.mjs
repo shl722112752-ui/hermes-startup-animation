@@ -13,7 +13,7 @@
  *   3. a bootstrap that clears the session gate and drives register().
  */
 
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, renameSync, unlinkSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -49,7 +49,12 @@ const exportRe = /^export default\s*\{/m
 if (!exportRe.test(src)) throw new Error('export default { ... } not found')
 src = src.replace(exportRe, 'var __HSS_PLUGIN__ = {')
 
-if (/\b(export|import)\b/.test(src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''))) {
+/* Only a statement at the start of a line counts. The old
+   /\b(export|import)\b/ also matched the words inside strings, so changing one
+   piece of UI copy (e.g. a label reading "Export") could make the build fail
+   somewhere completely unrelated. */
+const leftoverRe = /^[ \t]*(import|export)\b/m
+if (leftoverRe.test(src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, ''))) {
   throw new Error('leftover import/export statement after transform')
 }
 
@@ -105,8 +110,27 @@ var __HSS_CTX__ = {
   onDispose: function () {}
 }
 
-/* Only the real Hermes window (windowType 'tauri') gets the splash; a future
-   secondary panel window would report a different type and is left alone. */
+/* Only the real Hermes window gets the splash. Two independent signals, and at
+   least one must match:
+     * the page's own origin - the window renders embedded assets over
+       hermesui://localhost/index.html (shown as http://hermesui.localhost/...),
+     * window.hermesDesktop, which the app injects.
+   The origin check is defence in depth: DevToolsActivePort is a file that can go
+   stale, and --remote-debugging-port=0 hands out recycled port numbers, so the
+   new-document hook could otherwise inject this whole bundle into an unrelated
+   WebView2 app that happened to grab the port. */
+function __hssIsHermesPage() {
+  try {
+    if (String(location.protocol) === 'hermesui:') return true
+    if (String(location.hostname) === 'hermesui.localhost') return true
+    var d = window.hermesDesktop
+    if (d && d.windowType === 'tauri') return true
+  } catch (e) {}
+  return false
+}
+
+/* A future secondary panel window would report a different windowType and is
+   left alone. */
 function __hssIsMainWindow() {
   try {
     var d = window.hermesDesktop
@@ -130,6 +154,7 @@ function __hssCleanup() {
 function __hssMount() {
   if (window.__HSS_ACTIVE__) return
   window.__HSS_ACTIVE__ = true
+  if (!__hssIsHermesPage()) { console.log('[hermes-splash] not the Hermes UI page, skipping'); return }
   if (!__hssIsMainWindow()) { console.log('[hermes-splash] not the main window, skipping'); return }
 
   /* WebView2 keeps sessionStorage alive across app restarts, so the plugin's
@@ -233,7 +258,17 @@ ${PANEL_SRC}
 })()
 `
 
-writeFileSync(OUT, bundle, 'utf8')
+/* Write to a temp file and rename: an interrupted build must not leave a
+   truncated bundle behind, because the watcher only checks that the file
+   exists and would happily inject half a script. */
+const tmp = `${OUT}.tmp-${process.pid}`
+writeFileSync(tmp, bundle, 'utf8')
+try {
+  renameSync(tmp, OUT)
+} catch (e) {
+  try { unlinkSync(tmp) } catch { /* best effort */ }
+  throw e
+}
 console.log('plugin source :', SRC, `(${sourceLength} chars)`)
 console.log('bundle        :', OUT, `(${bundle.length} chars)`)
 console.log('sha256        :', createHash('sha256').update(bundle).digest('hex'))

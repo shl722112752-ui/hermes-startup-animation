@@ -13,7 +13,7 @@
  *   hermes-splash now                 让改动立刻生效：重载 Hermes 窗口（会重播动画）
  *   hermes-splash restart             重启注入守护进程
  *   hermes-splash doctor              自检
- *   hermes-splash reset               恢复默认值（保留 config.json 里已有的键）
+ *   hermes-splash reset               恢复默认值（备份后清掉所有覆盖项）
  *   hermes-splash dsh                 从本地 dsh-startup.json 导入设置
  */
 
@@ -46,7 +46,9 @@ const DSH_CFG = paths.dshConfig || ''
    让 Chromium 自己挑空闲端口，避免和本机其它 WebView2 应用抢同一个端口。 */
 const WANT_CDP_ENV = `--remote-debugging-port=${Number(paths.cdpPort) > 0 ? Number(paths.cdpPort) : 0}`
 const cdpEnvValue = () => WANT_CDP_ENV
-const API = `http://127.0.0.1:${Number(process.env.HSS_API_PORT || 9334)}`
+/* 面板 API 的端口：环境变量 > paths.json 的 apiPort（安装器 -ApiPort）> 默认 */
+const API_PORT = Number(process.env.HSS_API_PORT || paths.apiPort || 9334)
+const API = `http://127.0.0.1:${API_PORT}`
 
 /* 单一定义在 schema.mjs：命令行、守护进程的本地 API、窗口里的设置面板共用 */
 const parseValue = coerceValue
@@ -136,9 +138,14 @@ async function cdpCall(wsUrl, calls) {
   const send = (method, params = {}) => {
     const id = ++seq
     return new Promise((resolve, reject) => {
-      pending.set(id, { resolve, reject })
+      /* 定时器必须在应答到达时清掉：不清的话 node 进程会被这个 8 秒 timer
+         拖住，status/now/panel 每次都要多等 8 秒才退出。 */
+      const t = setTimeout(() => { if (pending.delete(id)) reject(new Error('CDP 超时: ' + method)) }, 8000)
+      pending.set(id, {
+        resolve: (v) => { clearTimeout(t); resolve(v) },
+        reject: (e) => { clearTimeout(t); reject(e) },
+      })
       ws.send(JSON.stringify({ id, method, params }))
-      setTimeout(() => { if (pending.delete(id)) reject(new Error('CDP 超时: ' + method)) }, 8000)
     })
   }
   try { return await calls(send) } finally { try { ws.close() } catch {} }
@@ -207,6 +214,9 @@ function cmdDoctor() {
 async function cmdDoctorAsync() {
   const checks = []
   const add = (ok, label, hint) => checks.push({ ok, label, hint })
+  /* 安装时明确跳过的项不算失败：否则 install.ps1 -NoTask 之类会以非 0 退出，
+     在 CI/脚本看来就像装坏了。 */
+  const addSkipped = (label, why) => checks.push({ ok: true, skipped: true, label: `${label}（安装时已跳过：${why}）`, hint: '' })
   add(existsSync(CFG_FILE), 'config.json 存在', CFG_FILE)
   add(existsSync(BUNDLE), '注入脚本 splash-bundle.js 存在', BUNDLE)
   add(existsSync(SRC), '插件源码 src/plugin.js 存在', SRC)
@@ -214,11 +224,21 @@ async function cmdDoctorAsync() {
   if (existsSync(BUNDLE) && existsSync(SRC)) {
     add(statSync(BUNDLE).mtimeMs >= statSync(SRC).mtimeMs, '生成物不比源码旧', '监督进程会自动重打包；也可手动跑 build-bundle.mjs')
   }
-  add(await supervisorAlive(), '监督进程在运行', 'hermes-splash restart（计划任务也会在 2 分钟内拉起）')
-  add(watcherAlive(), '注入进程在运行', '监督进程会在 2 秒内重启它；hermes-splash restart')
-  add(await apiAlive(), '设置面板 API 可用', `本地 ${API} 不通；hermes-splash restart`)
+  if (paths.skipStart === true) {
+    addSkipped('监督进程在运行', 'install.ps1 -SkipStart')
+    addSkipped('注入进程在运行', 'install.ps1 -SkipStart')
+    addSkipped('设置面板 API 可用', 'install.ps1 -SkipStart')
+  } else {
+    add(await supervisorAlive(), '监督进程在运行', 'hermes-splash restart（计划任务也会在 2 分钟内拉起）')
+    add(watcherAlive(), '注入进程在运行', '监督进程会在 2 秒内重启它；hermes-splash restart')
+    add(await apiAlive(), '设置面板 API 可用', `本地 ${API} 不通；hermes-splash restart`)
+  }
   const startupDir = join(process.env.APPDATA || '', 'Microsoft\\Windows\\Start Menu\\Programs\\Startup')
-  add(existsSync(join(startupDir, 'hermes-splash-supervisor.vbs')), '登录自启项已安装', startupDir)
+  if (paths.skipStartupEntry === true) {
+    addSkipped('登录自启项已安装', 'install.ps1 -NoStartupEntry')
+  } else {
+    add(existsSync(join(startupDir, 'hermes-splash-supervisor.vbs')), '登录自启项已安装', startupDir)
+  }
   const userEnv = readUserEnv()
   const wantEnv = cdpEnvValue()
   add(userEnv === wantEnv, '调试端口环境变量正确（用户级）',
@@ -226,16 +246,23 @@ async function cmdDoctorAsync() {
   if (await cdpTargets()) {
     add(!!cdpPort().port, '能解析到 Hermes 的调试端口', 'DevToolsActivePort 还没写出来？稍后重试')
   }
-  let taskOk = false
-  try {
-    /* 只看退出码：schtasks 的输出是本地化的（中文系统是「就绪」而不是 Ready） */
-    execFileSync('schtasks', ['/query', '/tn', 'HermesSplashWatchdog'],
-      { stdio: 'ignore', windowsHide: true, timeout: 15000 })
-    taskOk = true
-  } catch { taskOk = false }
-  add(taskOk, '看门狗计划任务已注册', 'powershell -ExecutionPolicy Bypass -File install-watchdog.ps1')
+  if (paths.skipTask === true) {
+    addSkipped('看门狗计划任务已注册', 'install.ps1 -NoTask')
+  } else {
+    let taskOk = false
+    try {
+      /* 只看退出码：schtasks 的输出是本地化的（中文系统是「就绪」而不是 Ready） */
+      execFileSync('schtasks', ['/query', '/tn', 'HermesSplashWatchdog'],
+        { stdio: 'ignore', windowsHide: true, timeout: 15000 })
+      taskOk = true
+    } catch { taskOk = false }
+    add(taskOk, '看门狗计划任务已注册', '重跑 install.ps1（它会用 -Force 重新注册计划任务）')
+  }
   add(existsSync(SUP_LOG) || existsSync(LOG_FILE), '有运行日志', LOG_FILE)
-  for (const c of checks) console.log(`${c.ok ? '  OK  ' : '  FAIL'} ${c.label}${c.ok ? '' : '\n        → ' + c.hint}`)
+  for (const c of checks) {
+    const tag = c.skipped ? '  SKIP' : c.ok ? '  OK  ' : '  FAIL'
+    console.log(`${tag} ${c.label}${c.ok ? '' : '\n        → ' + c.hint}`)
+  }
   const bad = checks.filter((c) => !c.ok).length
   console.log('')
   console.log(bad ? `${bad} 项不通过` : '全部通过')
@@ -256,13 +283,28 @@ function readUserEnv() {
 
 const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 
+/* supervisor.pid 在进程退出时不会被删掉，重启后这个 pid 很容易落到别的进程
+   上，所以动手杀之前先确认它真的是我们的监督进程。 */
+function commandLineOf(pid) {
+  try {
+    return execFileSync('powershell', ['-NoProfile', '-Command',
+      `(Get-CimInstance Win32_Process -Filter "ProcessId=${Number(pid)}").CommandLine`],
+      { encoding: 'utf8', windowsHide: true, timeout: 15000 }).trim()
+  } catch { return '' }
+}
+
 async function cmdRestart() {
   const pid = supervisorPid()
   if (pid && alive(pid)) {
-    try { process.kill(pid); console.log(`  已停止监督进程 pid ${pid}`) } catch { console.log(`  pid ${pid} 已不在`) }
-    /* 监督进程退出时会把子进程一起带走（它是父进程） */
-    const t0 = Date.now()
-    while (Date.now() - t0 < 4000 && alive(pid)) await sleep(150)
+    const cl = commandLineOf(pid)
+    if (!/supervisor\.mjs/.test(cl)) {
+      console.log(`  pid ${pid} 不是本项目的监督进程（pid 被复用了？），跳过；单实例由锁端口 ${LOCK_PORT} 保证`)
+    } else {
+      try { process.kill(pid); console.log(`  已停止监督进程 pid ${pid}`) } catch { console.log(`  pid ${pid} 已不在`) }
+      /* 监督进程退出时会把子进程一起带走（它是父进程） */
+      const t0 = Date.now()
+      while (Date.now() - t0 < 4000 && alive(pid)) await sleep(150)
+    }
   }
   try {
     execFileSync('wscript.exe', [VBS], { stdio: 'ignore' })
@@ -319,7 +361,8 @@ function cmdDsh() {
   const cfg = { ...readCfg() }
   const ported = []
   for (const k of Object.keys(DEFAULTS)) {
-    if (k in dsh && k !== 'mode') { cfg[k] = dsh[k]; ported.push(k) }
+    /* 走同一套校验：面板和命令行都过 coerceValue，只有这里以前是直接落盘的 */
+    if (k in dsh && k !== 'mode') { cfg[k] = coerceValue(k, dsh[k]); ported.push(k) }
   }
   writeCfg(cfg)
   console.log(`  已从 ${DSH_CFG} 导入 ${ported.length} 项`)
@@ -361,7 +404,7 @@ function usage() {
   now                    改动立刻生效（重载 Hermes 窗口，动画会重播）
   restart                重启注入守护进程
   doctor                 自检
-  reset                  恢复默认值（备份为 config.json.bak）
+  reset                  恢复默认值（备份为 config.json.<时间戳>.bak）
   dsh                    从本地 dsh-startup.json 导入设置`)
 }
 
@@ -393,7 +436,16 @@ try {
     case 'now': await cmdNow(); break
     case 'restart': await cmdRestart(); break
     case 'doctor': process.exitCode = (await cmdDoctor()) ? 0 : 1; break
-    case 'reset': { copyFileSync(CFG_FILE, CFG_FILE + '.bak'); writeCfg({}); console.log('  已恢复默认（旧文件备份为 config.json.bak）'); break }
+    case 'reset': {
+      /* 恢复默认 = 清掉 config.json 里的覆盖值。新装或刚清理过的机器上文件
+         可能还不存在，所以先判存在再备份，别让 reset 直接 ENOENT 失败。 */
+      if (existsSync(CFG_FILE)) {
+        copyFileSync(CFG_FILE, `${CFG_FILE}.${new Date().toISOString().replace(/[:.]/g, '-')}.bak`)
+      }
+      writeCfg({})
+      console.log('  已恢复默认（旧文件备份为 config.json.<时间戳>.bak）')
+      break
+    }
     case 'dsh': cmdDsh(); break
     case 'help': case '-h': case '--help': usage(); break
     default: usage(); process.exitCode = 1

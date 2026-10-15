@@ -6,7 +6,7 @@
 
 ```powershell
 $h = "$env:LOCALAPPDATA\HermesSplash\hermes-splash.cmd"
-& $h doctor      # 12 项只读自检
+& $h doctor      # 13 项只读自检
 & $h status      # 监督进程 / 注入进程 / 调试端口 / 当前是否在播
 ```
 

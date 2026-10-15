@@ -33,7 +33,6 @@ const BUNDLE_FILE = join(DIR, 'splash-bundle.js')
 const CONFIG_FILE = join(DIR, 'config.json')
 const LOG_FILE = join(DIR, 'watcher.log')
 const PID_FILE = join(DIR, 'watcher.pid')
-const API_PORT = Number(process.env.HSS_API_PORT || 9334)
 const IDLE_POLL_MS = 300
 const LIVE_POLL_MS = 2000
 const PROBE_MS = 700
@@ -44,6 +43,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 /* 调试端口不是写死的：默认由 Chromium 随机挑（--remote-debugging-port=0），
    实际端口从 Hermes 自己的 DevToolsActivePort 里读。详见 cdp-port.mjs。 */
 const PATHS = readPaths(DIR)
+/* 面板 API 端口：环境变量 > paths.json 的 apiPort（安装器 -ApiPort）> 默认 */
+const API_PORT = Number(process.env.HSS_API_PORT || PATHS.apiPort || 9334)
 let cdpPort = null
 let cdpPortSource = 'none'
 let cdpPortLogged = null
@@ -91,17 +92,37 @@ function loadConfigSeed() {
    exe 内嵌的 CSP connect-src 允许 http://127.0.0.1:*，页面可以直接 fetch。
    只监听 127.0.0.1：本机进程本来就能通过调试端口控制窗口，这里不额外扩大信任面。 */
 function startConfigApi() {
+  /* 只放行 Hermes 窗口自己的来源。以前这里无条件回 `*`，意味着你随手打开的
+     任意网页都能 fetch http://127.0.0.1:9334/config 读写你的动画配置
+     （典型的 localhost CSRF 暴露面；端口固定，扫一下就能找到）。
+     没有 Origin 的调用（本机脚本、curl、CLI）照旧放行。 */
+  const isAllowedOrigin = (origin) => {
+    if (!origin) return true
+    const o = origin.toLowerCase()
+    return o.startsWith('hermesui://') ||
+      o === 'http://hermesui.localhost' || o.startsWith('http://hermesui.localhost:') ||
+      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o)
+  }
   const server = createServer((req, res) => {
-    const cors = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'content-type',
-      'Cache-Control': 'no-store',
-    }
+    const origin = req.headers.origin || ''
+    const allowed = isAllowedOrigin(origin)
+    const cors = allowed
+      ? {
+          'Access-Control-Allow-Origin': origin || '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'content-type',
+          'Vary': 'Origin',
+          'Cache-Control': 'no-store',
+        }
+      : { 'Cache-Control': 'no-store' }
     const json = (code, body) => {
       res.writeHead(code, { ...cors, 'Content-Type': 'application/json; charset=utf-8' })
       res.end(JSON.stringify(body))
     }
+
+    /* 预检被 CORS 拦掉时浏览器不会发真正的请求，但简单请求会照发，
+       所以在服务端也直接拒掉，别让写入发生。 */
+    if (!allowed) { res.writeHead(403, cors); res.end('origin not allowed'); return }
 
     if (req.method === 'OPTIONS') { res.writeHead(204, cors); res.end(); return }
 
@@ -283,16 +304,8 @@ async function attach(target) {
     ws.addEventListener('error', () => { clearTimeout(timer); reject(new Error('websocket error')) }, { once: true })
   })
 
-  const entry = { ws }
-  attached.set(target.webSocketDebuggerUrl, entry)
-
+  const key = target.webSocketDebuggerUrl
   let closed = false
-  ws.addEventListener('close', () => {
-    closed = true
-    attached.delete(target.webSocketDebuggerUrl)
-    log(`detached ${target.id}`)
-  })
-
   const cdp = makeClient(ws)
   /* 每次附加 = 应用的一次启动。带一个新 token 告诉页面「这是新一轮启动」，
      这样 mode=session 只在启动时播一次，应用内刷新不会重播。 */
@@ -300,8 +313,23 @@ async function attach(target) {
   let source = buildSource(launchToken)
   let fingerprint = sourceFingerprint()
 
-  await cdp.send('Runtime.enable')
-  await cdp.send('Page.enable')
+  try {
+    await cdp.send('Runtime.enable')
+    await cdp.send('Page.enable')
+  } catch (e) {
+    /* 失败时不能把 target 留在 attached 里：主循环用 attached.has() 去重，
+       留着这个条目会让**本次应用运行期间永远不再尝试注入**。 */
+    try { ws.close() } catch { /* already gone */ }
+    throw e
+  }
+
+  const entry = { ws }
+  attached.set(key, entry)
+  ws.addEventListener('close', () => {
+    closed = true
+    attached.delete(key)
+    log(`detached ${target.id}`)
+  })
 
   /* (a) 之后所有文档：刷新 / 重新导航都在 document-start 就注入 */
   let hookId = null
