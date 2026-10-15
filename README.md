@@ -58,9 +58,10 @@ powershell -ExecutionPolicy Bypass -File "$env:TEMP\get.ps1"
 irm https://raw.githubusercontent.com/shl722112752-ui/hermes-startup-animation/main/get.ps1 | iex
 ```
 
-可选参数：`-Version v1.0.4` 装指定版本、`-Repo 你的用户名/仓库名` 用 fork、
-`-Dest D:\hsa` 解压后保留文件、`-InstallArgs "-NoStartupEntry -SkipStart"` 透传给安装器、
-`-SkipVerify` 跳过校验（不建议）。网络不通时脚本会打印手动步骤，不会中断你的终端。
+可选参数：`-Version <tag>`（装指定版本，默认最新）、`-Repo 你的用户名/仓库名`（用 fork）、
+`-Dest D:\hsa`（解压后保留文件）、`-NoInstall`（只下载 + 校验 + 解压，先看一眼再装）、
+`-InstallArgs "-NoStartupEntry -SkipStart"`（透传给安装器）、`-SkipVerify`（跳过校验，不建议）。
+网络不通或校验失败时，脚本会打印原因和手动步骤，并**以退出码 1 干净退出**，不会留下半装状态。
 
 ### 方式二：手动下载（想先看一眼代码）
 
@@ -69,14 +70,14 @@ irm https://raw.githubusercontent.com/shl722112752-ui/hermes-startup-animation/m
 2. 校验：
 
    ```powershell
-   Get-FileHash .\hermes-startup-animation-v1.0.4.zip -Algorithm SHA256
+   Get-FileHash .\hermes-startup-animation-<版本>.zip -Algorithm SHA256
    ```
 
-   和 `SHA256SUMS.txt` 里对应那行比对，一致再继续。
+   和 `SHA256SUMS.txt` 里对应那行比对（大小写无关），一致再继续。
 3. 解压后运行：
 
    ```powershell
-   powershell -ExecutionPolicy Bypass -File .\hermes-startup-animation-v1.0.4\install.ps1
+   powershell -ExecutionPolicy Bypass -File .\hermes-startup-animation-<版本>\install.ps1
    ```
 
 ### 方式三：git clone（想跟主分支）
